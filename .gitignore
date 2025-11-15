@@ -42,3 +42,7 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Documentation (stored in parent directory)
+ARCHITECTURE.md
+API_DOCUMENTATION.md

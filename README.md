@@ -267,26 +267,20 @@ Ensure the following in production:
 - [ ] Monitoring set up
 - [ ] Backups automated
 
-## 🤝 Contributing
+## 🔄 Development Workflow
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+1. Create a new branch for features
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-## 📄 License
+2. Make your changes and commit
+   ```bash
+   git add .
+   git commit -m "Description of changes"
+   ```
 
-This project is private and proprietary.
-
-## 👥 Authors
-
-- **AjDhisone** - [GitHub](https://github.com/AjDhisone)
-
-## 📧 Support
-
-For issues and questions, please open an issue in the GitHub repository.
-
----
-
-**Built with ❤️ for efficient retail inventory management**
+3. Push to GitHub
+   ```bash
+   git push origin feature/your-feature-name
+   ```
