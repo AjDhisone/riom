@@ -1,0 +1,55 @@
+const mongoose = require('mongoose');
+
+const skuSchema = new mongoose.Schema(
+	{
+		productId: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: 'Product',
+			required: true,
+		},
+		sku: {
+			type: String,
+			required: true,
+			trim: true,
+			unique: true,
+			index: true,
+		},
+		attributes: {
+			type: Map,
+			of: String,
+			default: {},
+		},
+		price: {
+			type: Number,
+			required: true,
+			min: 0,
+		},
+		barcode: {
+			type: String,
+			trim: true,
+			required: true,
+			unique: true,
+			index: true,
+		},
+		stock: {
+			type: Number,
+			default: 0,
+			min: 0,
+		},
+		reorderThreshold: {
+			type: Number,
+			default: 0,
+			min: 0,
+		},
+	},
+	{
+		timestamps: true,
+	}
+);
+
+skuSchema.index({ sku: 1 }, { unique: true });
+skuSchema.index({ productId: 1 });
+skuSchema.index({ barcode: 1 }, { unique: true });
+skuSchema.index({ stock: 1 });
+
+module.exports = mongoose.models.Sku || mongoose.model('Sku', skuSchema);
