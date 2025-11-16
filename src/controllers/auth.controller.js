@@ -19,6 +19,8 @@ const register = async (req, res, next) => {
 		const user = await authService.registerUser({ email, password, name, role });
 
 		req.session.userId = user._id;
+		req.session.user = user;
+		req.user = user;
 
 		return res.status(201).json(success(user, 'User registered successfully'));
 	} catch (err) {
@@ -45,7 +47,21 @@ const login = async (req, res, next) => {
 
 		const user = await authService.loginUser({ email, password });
 
+		// Set session user info so downstream middleware can authorize
 		req.session.userId = user._id;
+		req.session.user = user;
+		req.user = user;
+
+		// Force session save before responding
+		await new Promise((resolve, reject) => {
+			req.session.save((err) => {
+				if (err) {
+					logger.error({ err }, 'Failed to save session');
+					return reject(err);
+				}
+				resolve();
+			});
+		});
 
 		return res.json(success(user, 'Logged in successfully'));
 	} catch (err) {
@@ -103,6 +119,9 @@ const getCurrentUser = async (req, res, next) => {
 		if (!user) {
 			throw createHttpError('User not found', 404, errorCodes.NOT_AUTHORIZED);
 		}
+
+		req.session.user = user;
+		req.user = user;
 
 		return res.json(success(user, 'Current user fetched'));
 	} catch (err) {

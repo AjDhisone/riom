@@ -52,4 +52,36 @@ skuSchema.index({ productId: 1 });
 skuSchema.index({ barcode: 1 }, { unique: true });
 skuSchema.index({ stock: 1 });
 
+// Update parent product's totalStock after SKU save
+skuSchema.post('save', async function(doc) {
+	try {
+		const Product = mongoose.model('Product');
+		const Sku = mongoose.model('Sku');
+		
+		const skus = await Sku.find({ productId: doc.productId });
+		const totalStock = skus.reduce((sum, sku) => sum + (sku.stock || 0), 0);
+		
+		await Product.findByIdAndUpdate(doc.productId, { totalStock });
+	} catch (error) {
+		console.error('Failed to update product totalStock:', error);
+	}
+});
+
+// Update parent product's totalStock after SKU update
+skuSchema.post('findOneAndUpdate', async function(doc) {
+	if (doc) {
+		try {
+			const Product = mongoose.model('Product');
+			const Sku = mongoose.model('Sku');
+			
+			const skus = await Sku.find({ productId: doc.productId });
+			const totalStock = skus.reduce((sum, sku) => sum + (sku.stock || 0), 0);
+			
+			await Product.findByIdAndUpdate(doc.productId, { totalStock });
+		} catch (error) {
+			console.error('Failed to update product totalStock:', error);
+		}
+	}
+});
+
 module.exports = mongoose.models.Sku || mongoose.model('Sku', skuSchema);

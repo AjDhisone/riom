@@ -11,10 +11,10 @@ const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
 
-router.post('/', requireAuth, requireRole('admin'), createProduct);
+router.post('/', requireAuth, requireRole(['admin', 'manager']), createProduct);
 router.get('/', requireAuth, getProducts);
 router.get('/:id', requireAuth, getProductById);
-router.put('/:id', requireAuth, requireRole('admin'), updateProduct);
-router.delete('/:id', requireAuth, requireRole('admin'), deleteProduct);
+router.put('/:id', requireAuth, requireRole(['admin', 'manager']), updateProduct);
+router.delete('/:id', requireAuth, requireRole(['admin', 'manager']), deleteProduct);
 
 module.exports = router;

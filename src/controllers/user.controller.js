@@ -4,6 +4,32 @@ const { createHttpError } = require('../utils/httpError');
 const errorCodes = require('../constants/errorCodes');
 const logger = require('../utils/logger');
 
+const getUsers = async (req, res, next) => {
+	try {
+		const { page, limit, role, q } = req.query;
+		const result = await userService.getUsers({ page, limit, role, q });
+		return res.json(success(result));
+	} catch (error) {
+		logger.error({ err: error }, 'Failed to fetch users');
+		return next(error);
+	}
+};
+
+const createUser = async (req, res, next) => {
+	try {
+		const { username, email, password, role } = req.body;
+		if (!username || !email || !password) {
+			throw createHttpError('username, email, and password are required', 400, errorCodes.INVALID_INPUT);
+		}
+
+		const user = await userService.createUser({ username, email, password, role });
+		return res.status(201).json(success({ user }, 'User created successfully'));
+	} catch (error) {
+		logger.error({ err: error }, 'Failed to create user');
+		return next(error);
+	}
+};
+
 const updateUserRole = async (req, res, next) => {
 	try {
 		const { id } = req.params;
@@ -20,6 +46,25 @@ const updateUserRole = async (req, res, next) => {
 	}
 };
 
+const updateUserPassword = async (req, res, next) => {
+	try {
+		const { id } = req.params;
+		const { password } = req.body;
+		if (!password) {
+			throw createHttpError('password is required', 400, errorCodes.INVALID_INPUT);
+		}
+
+		const user = await userService.updateUserPassword(id, password, req.user?.id);
+		return res.json(success({ user }, 'Password updated successfully'));
+	} catch (error) {
+		logger.error({ err: error }, 'Failed to update user password');
+		return next(error);
+	}
+};
+
 module.exports = {
+	getUsers,
+	createUser,
 	updateUserRole,
+	updateUserPassword,
 };

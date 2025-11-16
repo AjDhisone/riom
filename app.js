@@ -10,6 +10,7 @@ const productRoutes = require('./src/routes/product.routes');
 const skuRoutes = require('./src/routes/sku.routes');
 const orderRoutes = require('./src/routes/order.routes');
 const analyticsRoutes = require('./src/routes/analytics.routes');
+const reportRoutes = require('./src/routes/report.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const alertRoutes = require('./src/routes/alert.routes');
 const userRoutes = require('./src/routes/user.routes');
@@ -20,6 +21,13 @@ const errorCodes = require('./src/constants/errorCodes');
 const logger = require('./src/utils/logger');
 
 const app = express();
+
+// Disable HTTP caching for API responses so session lookups always return fresh data
+app.set('etag', false);
+app.use((req, res, next) => {
+	res.set('Cache-Control', 'no-store');
+	return next();
+});
 
 const corsOrigin = process.env.CORS_ORIGIN
 	? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
@@ -90,6 +98,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/skus', skuRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/users', userRoutes);

@@ -193,7 +193,9 @@ const createOrder = async (data, userId) => {
 
 		await orderDoc.save({ session });
 		await session.commitTransaction();
-		return orderDoc.toObject();
+		const responseObject = orderDoc.toObject();
+		responseObject.totalItems = preparedItems.reduce((sum, item) => sum + item.quantity, 0);
+		return responseObject;
 	} catch (error) {
 		await session.abortTransaction();
 		throw error;
@@ -410,6 +412,41 @@ const getTopSelling = async (options = {}) => {
 		},
 		{ $unwind: { path: '$productDoc', preserveNullAndEmptyArrays: true } },
 		{
+			$lookup: {
+				from: 'skus',
+				let: {
+					productId: {
+						$ifNull: ['$skuDoc.productId', '$productId'],
+					},
+				},
+				pipeline: [
+					{
+						$match: {
+							$expr: { $eq: ['$productId', '$$productId'] },
+						},
+					},
+					{
+						$group: {
+							_id: null,
+							totalStock: {
+								$sum: {
+									$ifNull: ['$stock', 0],
+								},
+							},
+						},
+					},
+				],
+				as: 'productStock',
+			},
+		},
+		{
+			$addFields: {
+				productTotalStock: {
+					$ifNull: [{ $arrayElemAt: ['$productStock.totalStock', 0] }, 0],
+				},
+			},
+		},
+		{
 			$project: {
 				_id: 0,
 				skuId: '$_id',
@@ -422,6 +459,7 @@ const getTopSelling = async (options = {}) => {
 					$ifNull: ['$skuDoc.sku', '$skuCode'],
 				},
 				attributes: '$skuDoc.attributes',
+				stock: '$productTotalStock',
 				productName: '$productDoc.name',
 				productCategory: '$productDoc.category',
 			},

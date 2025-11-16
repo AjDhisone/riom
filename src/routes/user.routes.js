@@ -5,6 +5,9 @@ const userController = require('../controllers/user.controller');
 
 const router = express.Router();
 
+router.get('/', requireAuth, requireRole('admin'), userController.getUsers);
+router.post('/', requireAuth, requireRole('admin'), userController.createUser);
 router.put('/:id/role', requireAuth, requireRole('admin'), userController.updateUserRole);
+router.put('/:id/password', requireAuth, requireRole('admin'), userController.updateUserPassword);
 
 module.exports = router;

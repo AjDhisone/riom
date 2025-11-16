@@ -13,7 +13,7 @@ const requireRole = (...allowedRoles) => {
 		.filter(Boolean);
 
 	return (req, res, next) => {
-		const user = req.session?.user;
+		const user = req.user || req.session?.user;
 		if (!user) {
 			return res
 				.status(401)

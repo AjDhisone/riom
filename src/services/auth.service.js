@@ -3,7 +3,7 @@ const User = require('../models/user.model');
 const logger = require('../utils/logger');
 
 const DEFAULT_ROLE = 'staff';
-const ALLOWED_ROLES = ['admin', 'staff'];
+const ALLOWED_ROLES = ['admin', 'manager', 'staff'];
 
 const normalizeRole = (role) => (ALLOWED_ROLES.includes(role) ? role : DEFAULT_ROLE);
 

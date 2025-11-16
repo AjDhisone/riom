@@ -23,10 +23,32 @@ const createProduct = async (req, res, next) => {
 			category: typeof req.body?.category === 'string' ? req.body.category.trim() : '',
 			images: Array.isArray(req.body?.images) ? req.body.images.filter(Boolean) : [],
 			basePrice: req.body?.basePrice,
+			minStock: req.body?.minStock,
+			initialStock: req.body?.initialStock,
 		};
 
 		if (typeof payload.basePrice !== 'number' || payload.basePrice < 0) {
 			throw createHttpError('basePrice must be a non-negative number', 400, errorCodes.INVALID_INPUT);
+		}
+
+		if (typeof payload.minStock !== 'undefined') {
+			const parsedMinStock = Number(payload.minStock);
+			if (!Number.isFinite(parsedMinStock) || parsedMinStock < 0) {
+				throw createHttpError('minStock must be a non-negative number', 400, errorCodes.INVALID_INPUT);
+			}
+			payload.minStock = parsedMinStock;
+		} else {
+			delete payload.minStock;
+		}
+
+		if (typeof payload.initialStock !== 'undefined') {
+			const parsedInitialStock = Number(payload.initialStock);
+			if (!Number.isFinite(parsedInitialStock) || parsedInitialStock < 0) {
+				throw createHttpError('initialStock must be a non-negative number', 400, errorCodes.INVALID_INPUT);
+			}
+			payload.initialStock = parsedInitialStock;
+		} else {
+			delete payload.initialStock;
 		}
 
 		const product = await productService.createProduct(payload);
@@ -61,7 +83,18 @@ const getProducts = async (req, res, next) => {
 			isActive,
 		});
 
-		return res.json(success(result, 'Products fetched successfully'));
+		const products = Array.isArray(result.data) ? result.data : [];
+		const pageSize = Number(result.limit) || products.length || 1;
+		const totalItems = Number(result.total) || 0;
+		const payload = {
+			products,
+			page: Number(result.page) || page,
+			limit: pageSize,
+			total: totalItems,
+			totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+		};
+
+		return res.json(success(payload, 'Products fetched successfully'));
 	} catch (error) {
 		logger.error({ err: error }, 'Failed to fetch products');
 		return next(error);
@@ -104,10 +137,19 @@ const updateProduct = async (req, res, next) => {
 			category: typeof req.body?.category === 'string' ? req.body.category.trim() : undefined,
 			images: Array.isArray(req.body?.images) ? req.body.images.filter(Boolean) : undefined,
 			basePrice: req.body?.basePrice,
+			minStock: req.body?.minStock,
 		};
 
 		if (typeof payload.basePrice !== 'undefined' && (typeof payload.basePrice !== 'number' || payload.basePrice < 0)) {
 			throw createHttpError('basePrice must be a non-negative number', 400, errorCodes.INVALID_INPUT);
+		}
+
+		if (typeof payload.minStock !== 'undefined') {
+			const parsedMinStock = Number(payload.minStock);
+			if (!Number.isFinite(parsedMinStock) || parsedMinStock < 0) {
+				throw createHttpError('minStock must be a non-negative number', 400, errorCodes.INVALID_INPUT);
+			}
+			payload.minStock = parsedMinStock;
 		}
 
 		const product = await productService.updateProduct(id, payload);

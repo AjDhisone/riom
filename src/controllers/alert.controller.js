@@ -3,10 +3,12 @@ const { success } = require('../utils/response');
 const logger = require('../utils/logger');
 
 const formatAlert = (doc) => ({
+	productId: doc.productId?.toString?.() || doc.productId,
 	skuId: doc.skuId?.toString?.() || doc.skuId,
 	productName: doc.productName,
 	sku: doc.sku,
 	stock: doc.stock,
+	minStock: doc.minStock,
 	reorderThreshold: doc.reorderThreshold,
 });
 

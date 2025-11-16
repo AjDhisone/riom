@@ -230,6 +230,14 @@ const updateSku = async (id, data) => {
 		update.reorderThreshold = thresholdValue;
 	}
 
+	if (data.stock != null) {
+		const stockValue = Number(data.stock);
+		if (!Number.isFinite(stockValue) || stockValue < 0) {
+			throw createHttpError('Stock must be a non-negative number', 400, errorCodes.INVALID_INPUT);
+		}
+		update.stock = stockValue;
+	}
+
 	if (!Object.keys(update).length) {
 		return Sku.findById(id).lean();
 	}
@@ -239,6 +247,22 @@ const updateSku = async (id, data) => {
 	return Sku.findByIdAndUpdate(id, update, { new: true }).lean();
 };
 
+const deleteSku = async (id) => {
+	if (!id) {
+		return null;
+	}
+
+	const deletedSku = await Sku.findByIdAndDelete(id).lean();
+	if (!deletedSku) {
+		return null;
+	}
+
+	if (deletedSku.productId) {
+		await Product.findByIdAndUpdate(deletedSku.productId, { $inc: { skuCount: -1 } }).exec().catch(() => {});
+	}
+
+	return deletedSku;
+};
 const adjustStockInternal = async (
 	skuId,
 	delta,
@@ -379,22 +403,109 @@ const bulkUpdateStock = async (adjustments = []) => {
 };
 
 const findLowStock = async () => {
-	const defaultThreshold = await getDefaultReorderThreshold();
-
-	return Sku.aggregate([
+	const productsAtRisk = await Product.aggregate([
+		{
+			$addFields: {
+				minStockValue: {
+					$convert: {
+						input: '$minStock',
+						to: 'double',
+						onError: null,
+						onNull: null,
+					},
+				},
+			},
+		},
 		{
 			$match: {
-				$expr: {
-					$or: [
-						{
-							$and: [
-								{ $ne: ['$reorderThreshold', null] },
-								{ $lte: ['$stock', '$reorderThreshold'] },
-							],
+				$or: [
+					{ isActive: { $exists: false } },
+					{ isActive: { $ne: false } },
+				],
+			},
+		},
+		{
+			$lookup: {
+				from: 'skus',
+				let: { productId: '$_id' },
+				pipeline: [
+					{
+						$match: {
+							$expr: { $eq: ['$productId', '$$productId'] },
 						},
-						{ $lte: ['$stock', { $literal: defaultThreshold }] },
-					],
+					},
+					{
+						$group: {
+							_id: null,
+							totalStock: {
+								$sum: {
+									$convert: {
+										input: '$stock',
+										to: 'double',
+										onError: 0,
+										onNull: 0,
+									},
+								},
+							},
+						},
+					},
+				],
+				as: 'skuStock',
+			},
+		},
+		{
+			$addFields: {
+				totalStock: {
+					$ifNull: [{ $first: '$skuStock.totalStock' }, 0],
 				},
+			},
+		},
+		{
+			$match: {
+				minStockValue: { $ne: null, $gt: 0 },
+				$expr: { $lte: ['$totalStock', '$minStockValue'] },
+			},
+		},
+		{
+			$project: {
+				productId: '$_id',
+				productName: '$name',
+				skuId: null,
+				sku: null,
+				stock: '$totalStock',
+				minStock: '$minStockValue',
+				reorderThreshold: null,
+			},
+		},
+		{ $sort: { stock: 1, productName: 1 } },
+	]).exec();
+
+	const skuSpecificAlerts = await Sku.aggregate([
+		{
+			$addFields: {
+				reorderThresholdValue: {
+					$convert: {
+						input: '$reorderThreshold',
+						to: 'double',
+						onError: null,
+						onNull: null,
+					},
+				},
+				stockValue: {
+					$convert: {
+						input: '$stock',
+						to: 'double',
+						onError: null,
+						onNull: null,
+					},
+				},
+			},
+		},
+		{
+			$match: {
+				reorderThresholdValue: { $ne: null, $gt: 0 },
+				stockValue: { $ne: null },
+				$expr: { $lte: ['$stockValue', '$reorderThresholdValue'] },
 			},
 		},
 		{
@@ -407,19 +518,35 @@ const findLowStock = async () => {
 		},
 		{ $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
 		{
+			$match: {
+				$or: [
+					{ 'product.isActive': { $exists: false } },
+					{ 'product.isActive': { $ne: false } },
+				],
+			},
+		},
+		{
 			$project: {
-				skuId: '$_id',
+				productId: '$productId',
 				productName: '$product.name',
-				sku: 1,
-				stock: 1,
-				reorderThreshold: {
-					$ifNull: ['$reorderThreshold', { $literal: defaultThreshold }],
-				},
-				productId: 1,
+				skuId: '$_id',
+				sku: '$sku',
+				stock: '$stockValue',
+				reorderThreshold: '$reorderThresholdValue',
+				minStock: null,
 			},
 		},
 		{ $sort: { stock: 1, sku: 1 } },
-	]);
+	]).exec();
+
+	// Prioritize SKU-specific alerts over product-level alerts
+	// If a product has SKU-specific alerts, skip the product-level alert
+	const productIdsWithSkuAlerts = new Set(skuSpecificAlerts.map(s => s.productId.toString()));
+	const uniqueProductAlerts = productsAtRisk.filter(
+		product => !productIdsWithSkuAlerts.has(product.productId.toString())
+	);
+
+	return [...skuSpecificAlerts, ...uniqueProductAlerts];
 };
 
 /*
@@ -450,6 +577,14 @@ const findByBarcode = async (barcode) => {
 			},
 		},
 		{ $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+		{
+			$match: {
+				$or: [
+					{ 'product.isActive': { $exists: false } },
+					{ 'product.isActive': { $ne: false } },
+				],
+			},
+		},
 		{
 			$project: {
 				skuId: '$_id',
@@ -554,6 +689,7 @@ module.exports = {
 	getSkus,
 	getSkuById,
 	updateSku,
+	deleteSku,
 	adjustStock,
 	bulkUpdateStock,
 	findLowStock,

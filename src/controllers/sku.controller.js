@@ -100,6 +100,7 @@ const updateSku = async (req, res, next) => {
 			attributes: req.body?.attributes,
 			reorderThreshold: req.body?.reorderThreshold,
 			barcode: req.body?.barcode,
+			stock: req.body?.stock,
 		};
 
 		const sku = await skuService.updateSku(id, payload);
@@ -220,11 +221,26 @@ const scanSku = async (req, res, next) => {
 	}
 };
 
+const deleteSku = async (req, res, next) => {
+	try {
+		const { id } = req.params;
+		const sku = await skuService.deleteSku(id);
+		if (!sku) {
+			throw createHttpError('SKU not found', 404, errorCodes.SKU_NOT_FOUND);
+		}
+		return res.json(success({ sku }, 'SKU deleted successfully'));
+	} catch (error) {
+		logger.error({ err: error }, 'Failed to delete SKU');
+		return next(error);
+	}
+};
+
 module.exports = {
 	createSku,
 	getSkus,
 	getSkuById,
 	updateSku,
+	deleteSku,
 	adjustSkuStock,
 	bulkAdjustSkuStock,
 	searchSku,

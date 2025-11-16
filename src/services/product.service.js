@@ -1,6 +1,38 @@
 const Product = require('../models/product.model');
+const Sku = require('../models/sku.model');
+const skuService = require('./sku.service');
+const logger = require('../utils/logger');
 const { createHttpError } = require('../utils/httpError');
 const errorCodes = require('../constants/errorCodes');
+
+const coerceNonNegative = (value, fallback = 0, fieldName = 'value') => {
+	if (value == null) {
+		return fallback;
+	}
+
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric) || numeric < 0) {
+		throw createHttpError(`${fieldName} must be a non-negative number`, 400, errorCodes.INVALID_INPUT);
+	}
+	return numeric;
+};
+
+const generateDefaultSkuCode = (name, price) => {
+	const base = typeof name === 'string' && name.trim()
+		? name
+		: 'DEFAULT';
+	const slug = base
+		.replace(/[^a-zA-Z0-9]+/g, '-')
+		.toUpperCase()
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 20);
+	
+	const priceFormatted = typeof price === 'number' && Number.isFinite(price)
+		? price.toFixed(0)
+		: '0';
+	
+	return `${slug || 'DEFAULT'}-${priceFormatted}`;
+};
 
 const createProduct = async (data) => {
 	const { name, category, basePrice } = data;
@@ -8,17 +40,56 @@ const createProduct = async (data) => {
 		throw createHttpError('Missing required product fields', 400, errorCodes.INVALID_INPUT);
 	}
 
+	const minStockValue = coerceNonNegative(data.minStock, 0, 'minStock');
+	const hasInitialStock = Object.prototype.hasOwnProperty.call(data, 'initialStock');
+	const initialStockValue = hasInitialStock
+		? coerceNonNegative(data.initialStock, 0, 'initialStock')
+		: 0;
+
 	const product = await Product.create({
 		name,
 		description: data.description,
 		category,
 		images: data.images || [],
+		minStock: minStockValue,
 		basePrice,
 		skuCount: 0,
 		isActive: true,
 	});
 
-	return product;
+	let defaultSku = null;
+	if (hasInitialStock) {
+		try {
+			const skuData = {
+				productId: product._id.toString(),
+				sku: generateDefaultSkuCode(name, basePrice),
+				price: basePrice,
+				stock: initialStockValue,
+				reorderThreshold: minStockValue,
+			};
+			
+			// Include attributes if provided
+			if (data.attributes && typeof data.attributes === 'object') {
+				skuData.attributes = data.attributes;
+			}
+			
+			defaultSku = await skuService.createSku(skuData);
+		} catch (error) {
+			logger.error({ err: error, productId: product._id.toString() }, 'Failed to create default SKU for product');
+			await Product.findByIdAndDelete(product._id).catch((cleanupError) => {
+				logger.error({ err: cleanupError, productId: product._id.toString() }, 'Failed to cleanup product after default SKU creation error');
+			});
+			throw error;
+		}
+	}
+
+	const freshProduct = await Product.findById(product._id).lean();
+	const totalStock = defaultSku ? defaultSku.stock : 0;
+
+	return {
+		...(freshProduct || {}),
+		totalStock,
+	};
 };
 
 const getProducts = async (options = {}) => {
@@ -52,8 +123,41 @@ const getProducts = async (options = {}) => {
 		Product.countDocuments(filters),
 	]);
 
+	const productIds = data.map((doc) => doc._id).filter(Boolean);
+	let stockMap = new Map();
+	if (productIds.length) {
+		const stockCounts = await Sku.aggregate([
+			{ $match: { productId: { $in: productIds } } },
+			{
+				$group: {
+					_id: '$productId',
+					totalStock: {
+						$sum: {
+							$convert: {
+								input: '$stock',
+								to: 'double',
+								onError: 0,
+								onNull: 0,
+							},
+						},
+					},
+				},
+			},
+		]).exec();
+		stockMap = new Map(stockCounts.map((entry) => [entry._id.toString(), entry.totalStock]));
+	}
+
+	const productsWithStock = data.map((doc) => {
+		const product = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+		const totalStock = stockMap.get(product._id?.toString()) || 0;
+		return {
+			...product,
+			totalStock,
+		};
+	});
+
 	return {
-		data,
+		data: productsWithStock,
 		total,
 		page: Number(page),
 		limit: Number(limit),
@@ -80,6 +184,10 @@ const updateProduct = async (id, data) => {
 		basePrice: data.basePrice,
 		images: data.images,
 	};
+
+	if (Object.prototype.hasOwnProperty.call(data, 'minStock')) {
+		fieldsToUpdate.minStock = coerceNonNegative(data.minStock, 0, 'minStock');
+	}
 
 	Object.keys(fieldsToUpdate).forEach((key) => {
 		if (typeof fieldsToUpdate[key] === 'undefined') {

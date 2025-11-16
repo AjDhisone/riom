@@ -6,7 +6,7 @@ const analyticsController = require('../controllers/analytics.controller');
 const router = express.Router();
 
 router.use(requireAuth);
-router.use(requireRole('admin'));
+router.use(requireRole(['admin', 'manager']));
 
 router.get('/sales-summary', analyticsController.getSalesSummary);
 router.get('/top-selling', analyticsController.getTopSelling);
