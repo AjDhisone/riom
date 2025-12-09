@@ -62,9 +62,23 @@ const updateUserPassword = async (req, res, next) => {
 	}
 };
 
+const deleteUser = async (req, res, next) => {
+	try {
+		const { id } = req.params;
+		const requestingUserId = req.session?.user?.id;
+
+		const result = await userService.deleteUser(id, requestingUserId);
+		return res.json(success(result, 'User deleted successfully'));
+	} catch (error) {
+		logger.error({ err: error }, 'Failed to delete user');
+		return next(error);
+	}
+};
+
 module.exports = {
 	getUsers,
 	createUser,
 	updateUserRole,
 	updateUserPassword,
+	deleteUser,
 };

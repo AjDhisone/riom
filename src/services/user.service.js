@@ -162,10 +162,42 @@ const updateUserPassword = async (userId, newPassword, requestingUserId) => {
 
 	return toSafeUser(user);
 };
+const deleteUser = async (userId, requestingUserId) => {
+	if (!userId) {
+		const error = new Error('userId is required');
+		error.statusCode = 400;
+		throw error;
+	}
+
+	if (!mongoose.Types.ObjectId.isValid(userId)) {
+		const error = new Error('Invalid user id');
+		error.statusCode = 400;
+		throw error;
+	}
+
+	// Prevent self-deletion
+	if (userId === requestingUserId) {
+		const error = new Error('Cannot delete your own account');
+		error.statusCode = 400;
+		throw error;
+	}
+
+	const user = await User.findById(userId);
+	if (!user) {
+		const error = new Error('User not found');
+		error.statusCode = 404;
+		throw error;
+	}
+
+	await User.findByIdAndDelete(userId);
+
+	return { success: true, message: 'User deleted successfully' };
+};
 
 module.exports = {
 	getUsers,
 	createUser,
 	updateUserRole,
 	updateUserPassword,
+	deleteUser,
 };

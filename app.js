@@ -14,7 +14,9 @@ const reportRoutes = require('./src/routes/report.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const alertRoutes = require('./src/routes/alert.routes');
 const userRoutes = require('./src/routes/user.routes');
+const aiRoutes = require('./src/routes/ai.routes');
 const errorHandler = require('./src/middleware/errorHandler');
+const { apiLimiter, authLimiter, aiLimiter } = require('./src/middleware/rateLimiter');
 const { success } = require('./src/utils/response');
 const { createHttpError } = require('./src/utils/httpError');
 const errorCodes = require('./src/constants/errorCodes');
@@ -93,7 +95,11 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(session(sessionOptions));
 
-app.use('/api/auth', authRoutes);
+// Apply general rate limiting to all API routes
+app.use('/api', apiLimiter);
+
+// Apply stricter rate limiting to auth routes
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/skus', skuRoutes);
 app.use('/api/orders', orderRoutes);
@@ -102,6 +108,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/users', userRoutes);
+// Apply stricter rate limiting to AI routes (expensive operations)
+app.use('/api/ai', aiLimiter, aiRoutes);
 
 app.get('/api/health', (req, res) => {
 	res.json(success({ status: 'ok' }, 'Healthy'));

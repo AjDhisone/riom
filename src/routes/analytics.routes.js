@@ -11,5 +11,6 @@ router.use(requireRole(['admin', 'manager']));
 router.get('/sales-summary', analyticsController.getSalesSummary);
 router.get('/top-selling', analyticsController.getTopSelling);
 router.get('/daily-trend', analyticsController.getDailySalesTrend);
+router.get('/category-breakdown', analyticsController.getCategoryBreakdown);
 
 module.exports = router;

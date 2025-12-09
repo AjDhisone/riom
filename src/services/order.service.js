@@ -519,6 +519,71 @@ const getDailySalesTrend = async (options = {}) => {
 	}));
 };
 
+const getCategoryBreakdown = async (options = {}) => {
+	const fromDate = parseDateInput(options.from, 'from');
+	const toDate = parseDateInput(options.to, 'to');
+	if (fromDate && toDate && fromDate > toDate) {
+		throw createValidationError('from date must be earlier than or equal to to date');
+	}
+
+	const match = { status: 'completed' };
+	if (fromDate || toDate) {
+		match.createdAt = {};
+		if (fromDate) {
+			match.createdAt.$gte = fromDate;
+		}
+		if (toDate) {
+			match.createdAt.$lte = toDate;
+		}
+	}
+
+	const breakdown = await Order.aggregate([
+		{ $match: match },
+		{ $unwind: '$items' },
+		{
+			$lookup: {
+				from: 'skus',
+				localField: 'items.skuId',
+				foreignField: '_id',
+				as: 'skuDoc',
+			},
+		},
+		{ $unwind: { path: '$skuDoc', preserveNullAndEmptyArrays: true } },
+		{
+			$lookup: {
+				from: 'products',
+				localField: 'skuDoc.productId',
+				foreignField: '_id',
+				as: 'productDoc',
+			},
+		},
+		{ $unwind: { path: '$productDoc', preserveNullAndEmptyArrays: true } },
+		{
+			$group: {
+				_id: { $ifNull: ['$productDoc.category', 'Uncategorized'] },
+				totalSales: { $sum: '$items.lineTotal' },
+				totalQty: { $sum: '$items.quantity' },
+				productCount: { $addToSet: '$productDoc._id' },
+			},
+		},
+		{
+			$project: {
+				_id: 0,
+				category: '$_id',
+				totalSales: 1,
+				totalQty: 1,
+				productCount: { $size: '$productCount' },
+			},
+		},
+		{ $sort: { totalSales: -1 } },
+	]).exec();
+
+	return breakdown.map((item) => ({
+		...item,
+		totalSales: roundCurrency(item.totalSales),
+	}));
+};
+
 module.exports = {
 	createOrder,
 	listOrders,
@@ -526,4 +591,5 @@ module.exports = {
 	getSalesSummary,
 	getTopSelling,
 	getDailySalesTrend,
+	getCategoryBreakdown,
 };

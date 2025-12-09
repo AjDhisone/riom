@@ -5,6 +5,23 @@ const logger = require('../utils/logger');
 const { createHttpError } = require('../utils/httpError');
 const errorCodes = require('../constants/errorCodes');
 
+/**
+ * Convert string to Title Case for consistent storage
+ * @param {string} str - Input string
+ * @returns {string} Title cased string (e.g., "blue shirt" → "Blue Shirt")
+ */
+const toTitleCase = (str) => {
+	if (typeof str !== 'string' || !str.trim()) {
+		return str;
+	}
+	return str
+		.trim()
+		.toLowerCase()
+		.split(' ')
+		.map(word => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(' ');
+};
+
 const coerceNonNegative = (value, fallback = 0, fieldName = 'value') => {
 	if (value == null) {
 		return fallback;
@@ -26,11 +43,11 @@ const generateDefaultSkuCode = (name, price) => {
 		.toUpperCase()
 		.replace(/^-+|-+$/g, '')
 		.slice(0, 20);
-	
+
 	const priceFormatted = typeof price === 'number' && Number.isFinite(price)
 		? price.toFixed(0)
 		: '0';
-	
+
 	return `${slug || 'DEFAULT'}-${priceFormatted}`;
 };
 
@@ -40,6 +57,10 @@ const createProduct = async (data) => {
 		throw createHttpError('Missing required product fields', 400, errorCodes.INVALID_INPUT);
 	}
 
+	// Normalize name and category to Title Case for case-insensitive consistency
+	const normalizedName = toTitleCase(name);
+	const normalizedCategory = toTitleCase(category);
+
 	const minStockValue = coerceNonNegative(data.minStock, 0, 'minStock');
 	const hasInitialStock = Object.prototype.hasOwnProperty.call(data, 'initialStock');
 	const initialStockValue = hasInitialStock
@@ -47,9 +68,9 @@ const createProduct = async (data) => {
 		: 0;
 
 	const product = await Product.create({
-		name,
+		name: normalizedName,
 		description: data.description,
-		category,
+		category: normalizedCategory,
 		images: data.images || [],
 		minStock: minStockValue,
 		basePrice,
@@ -67,12 +88,12 @@ const createProduct = async (data) => {
 				stock: initialStockValue,
 				reorderThreshold: minStockValue,
 			};
-			
+
 			// Include attributes if provided
 			if (data.attributes && typeof data.attributes === 'object') {
 				skuData.attributes = data.attributes;
 			}
-			
+
 			defaultSku = await skuService.createSku(skuData);
 		} catch (error) {
 			logger.error({ err: error, productId: product._id.toString() }, 'Failed to create default SKU for product');
@@ -178,9 +199,9 @@ const updateProduct = async (id, data) => {
 	}
 
 	const fieldsToUpdate = {
-		name: data.name,
+		name: data.name ? toTitleCase(data.name) : undefined,
 		description: data.description,
-		category: data.category,
+		category: data.category ? toTitleCase(data.category) : undefined,
 		basePrice: data.basePrice,
 		images: data.images,
 	};

@@ -118,8 +118,28 @@ const getDailySalesTrend = async (req, res, next) => {
 	}
 };
 
+const getCategoryBreakdown = async (req, res, next) => {
+	try {
+		const { from, to } = resolveDateRange(req.query || {});
+		const data = await orderService.getCategoryBreakdown({ from, to });
+		return res.json(
+			success(
+				{
+					range: { from: from.toISOString(), to: to.toISOString() },
+					data,
+				},
+				'Category breakdown fetched successfully'
+			)
+		);
+	} catch (error) {
+		logger.error({ err: error }, 'Failed to fetch category breakdown');
+		return next(error);
+	}
+};
+
 module.exports = {
 	getSalesSummary,
 	getTopSelling,
 	getDailySalesTrend,
+	getCategoryBreakdown,
 };
